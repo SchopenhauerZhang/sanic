@@ -36,6 +36,7 @@ DEFAULT_CONFIG = {
 class Config(dict):
     def __init__(self, defaults=None, load_env=True, keep_alive=None):
         defaults = defaults or {}
+        # * 将元素for 形成( ) ， **将元素for形成dict 
         super().__init__({**DEFAULT_CONFIG, **defaults})
 
         self.LOGO = BASE_LOGO

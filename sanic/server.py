@@ -43,12 +43,12 @@ OS_IS_WINDOWS = os.name == "nt"
 class Signal:
     stopped = False
 
-
+# Protocol协议
 class HttpProtocol(asyncio.Protocol):
     """
     This class provides a basic HTTP implementation of the sanic framework.
     """
-
+    # 限制类可新增的属性和方法
     __slots__ = (
         # app
         "app",
@@ -103,6 +103,7 @@ class HttpProtocol(asyncio.Protocol):
     ):
         asyncio.set_event_loop(loop)
         self.loop = loop
+        # major=3 < 3,minor=7<7 True
         deprecated_loop = self.loop if sys.version_info < (3, 7) else None
         self.app = app
         self.transport = None
@@ -125,6 +126,8 @@ class HttpProtocol(asyncio.Protocol):
         self.request_class = self.app.request_class or Request
         self.is_request_stream = self.app.is_request_stream
         self._is_stream_handler = False
+        # 通知并发任务,asyncio.Event 类似 threading.Event 用来允许多个消费者等待某个事情发生，
+        # 不用通过监听一个特殊的值的来说实现类似通知的功能。
         self._not_paused = asyncio.Event(loop=deprecated_loop)
         self._total_request_size = 0
         self._request_timeout_handler = None
@@ -642,6 +645,8 @@ def trigger_events(events, loop):
     :param events: one or more sync or async functions to execute
     :param loop: event loop
     """
+
+    # for e in after_start
     for event in events:
         result = event(loop)
         if isawaitable(result):
@@ -685,6 +690,8 @@ class AsyncioServer:
 
     def after_start(self):
         """Trigger "after_server_start" events"""
+        #  for i in after_start:
+        #      rununtil_comlete(i(loop))
         trigger_events(self._after_start, self.loop)
 
     def before_stop(self):
@@ -797,6 +804,8 @@ def serve(
     app.asgi = False
 
     connections = connections if connections is not None else set()
+    # 返回httpprotocol 协议对象( )其中部分参数被保护（传递给protocol），返回一个更为简单的对象
+    # functools.partial返回一个函数对象,这个函数对象是第一个参数（函数）对象
     server = partial(
         protocol,
         loop=loop,
@@ -828,7 +837,7 @@ def serve(
             before_stop=before_stop,
             after_stop=after_stop,
         )
-
+    # 对每个before_start执行一遍loop
     trigger_events(before_start, loop)
 
     try:
@@ -840,6 +849,7 @@ def serve(
     trigger_events(after_start, loop)
 
     # Ignore SIGINT when run_multiple
+    # signal_func  就是signal.signal
     if run_multiple:
         signal_func(SIGINT, SIG_IGN)
 

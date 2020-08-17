@@ -122,14 +122,14 @@ class Lifespan:
                 'You have set a listener for "before_server_start" '
                 "in ASGI mode. "
                 "It will be executed as early as possible, but not before "
-                "the ASGI server is started."
+                "not beforethe ASGI server is started."
             )
         if "after_server_stop" in self.asgi_app.sanic_app.listeners:
             warnings.warn(
                 'You have set a listener for "after_server_stop" '
                 "in ASGI mode. "
                 "It will be executed as late as possible, but not after "
-                "the ASGI server is stopped."
+                "not after the ASGI server is stopped."
             )
 
     async def startup(self) -> None:
@@ -205,10 +205,12 @@ class ASGIApp:
         instance.sanic_app = sanic_app
         instance.transport = MockTransport(scope, receive, send)
         instance.transport.loop = sanic_app.loop
+        # 给instance.transport添加add_task并赋值为sanic_app.loop.create_task
         setattr(instance.transport, "add_task", sanic_app.loop.create_task)
 
         headers = Header(
             [
+                # 默认编码是latin-1(西欧语言)
                 (key.decode("latin-1"), value.decode("latin-1"))
                 for key, value in scope.get("headers", [])
             ]
@@ -216,24 +218,32 @@ class ASGIApp:
         instance.do_stream = (
             True if headers.get("expect") == "100-continue" else False
         )
+        # 检查实例的before \ after server stop function 是否已经被listen,
+        # 如果已经被listen则warn，因为
+        # not before the ASGI server is started。
+        # not after the ASGI server is stopped.
         instance.lifespan = Lifespan(instance)
 
         if scope["type"] == "lifespan":
             await instance.lifespan(scope, receive, send)
         else:
             path = (
+                # 只包含不带/的path
                 scope["path"][1:]
                 if scope["path"].startswith("/")
                 else scope["path"]
             )
+            # quote去掉特殊字符,Replace special characters in string using the %xx escape.
             url = "/".join([scope.get("root_path", ""), quote(path)])
-            url_bytes = url.encode("utf-8")
+            url_bytes = url.encode("latin-1")# utf-8
+
             url_bytes += b"?" + scope["query_string"]
 
             if scope["type"] == "http":
                 version = scope["http_version"]
                 method = scope["method"]
             elif scope["type"] == "websocket":
+                # 设置websocket 的http 版本为1.1 get
                 version = "1.1"
                 method = "GET"
 
@@ -261,6 +271,7 @@ class ASGIApp:
                     instance.request
                 )
                 if is_stream_handler:
+                    # StreamBuffer其实就是 asyncio.queue
                     instance.request.stream = StreamBuffer(
                         sanic_app.config.REQUEST_BUFFER_QUEUE_SIZE
                     )

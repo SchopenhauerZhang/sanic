@@ -79,15 +79,21 @@ class Router:
     routes_always_check = None
     parameter_pattern = re.compile(r"<(.+?)>")
 
+
     def __init__(self):
         self.routes_all = {}
         self.routes_names = {}
         self.routes_static_files = {}
         self.routes_static = {}
+        # routes_dynamic = [ 
+        # '/的个数' [route,route],
+        # '/的个数' [route,route],
+        #  ]
         self.routes_dynamic = defaultdict(list)
         self.routes_always_check = []
         self.hosts = set()
 
+    # 类方法
     @classmethod
     def parse_parameter_string(cls, parameter_string):
         """Parse a parameter string into its constituent name, type, and
@@ -106,6 +112,7 @@ class Router:
         name = parameter_string
         pattern = "string"
         if ":" in parameter_string:
+            # parameter_string : <param_one:[A-z]>
             name, pattern = parameter_string.split(":", 1)
             if not name:
                 raise ValueError(
@@ -116,6 +123,7 @@ class Router:
         # Pull from pre-configured types
         _type, pattern = REGEX_TYPES.get(pattern, default)
 
+        # param_one    str     [A-z]
         return name, _type, pattern
 
     def add(
@@ -156,14 +164,16 @@ class Router:
             # slashes logic on the leaf nodes (the individual host strings in
             # the list of host)
             return routes
-
+        # host存在且不止一个
         # Add versions with and without trailing /
         slashed_methods = self.routes_all.get(uri + "/", frozenset({}))
         unslashed_methods = self.routes_all.get(uri[:-1], frozenset({}))
         if isinstance(methods, Iterable):
+            # 如果方法全是带有/ _slash_is_missing则是true否则false
             _slash_is_missing = all(
                 method in slashed_methods for method in methods
             )
+            # 如果方法全是带有/ _without_slash_is_missing则是true否则false
             _without_slash_is_missing = all(
                 method in unslashed_methods for method in methods
             )
@@ -171,7 +181,9 @@ class Router:
             _slash_is_missing = methods in slashed_methods
             _without_slash_is_missing = methods in unslashed_methods
 
+        # 不是/结尾
         slash_is_missing = not uri[-1] == "/" and not _slash_is_missing
+
         without_slash_is_missing = (
             uri[-1] == "/" and not _without_slash_is_missing and not uri == "/"
         )
@@ -223,15 +235,20 @@ class Router:
             name = match.group(1)
             name, _type, pattern = self.parse_parameter_string(name)
 
+            # param_one    str     [A-z]
+            
             if name in parameter_names:
+                # name不能重复
                 raise ParameterNameConflicts(
                     f"Multiple parameter named <{name}> " f"in route uri {uri}"
                 )
             parameter_names.add(name)
 
+            # param_one    str 
             parameter = Parameter(name=name, cast=_type)
             parameters.append(parameter)
-
+            
+            # 找/，如果找到了/则添加unhashable标志
             # Mark the whole route as unhashable if it has the hash key in it
             if re.search(r"(^|[^^]){1}/", pattern):
                 properties["unhashable"] = True
@@ -240,7 +257,8 @@ class Router:
                 properties["unhashable"] = True
 
             return f"({pattern})"
-
+        
+        # 返回通过使用 add_parameter 替换在 uri 最左边非重叠出现的 parameter_pattern 而获得的字符串,没有则原样返回uri
         pattern_string = re.sub(self.parameter_pattern, add_parameter, uri)
         pattern = re.compile(fr"^{pattern_string}$")
 
@@ -270,12 +288,15 @@ class Router:
 
         if parameters:
             # TODO: This is too complex, we need to reduce the complexity
+            # 从动态路由和routes_always_check中找出符合当前路由规则的路由，并将其从动态路由和routes_always_check中移除
             if properties["unhashable"]:
                 routes_to_check = self.routes_always_check
+                #从routes_always_check中找出符合当前正则规则和参数的路由
                 ndx, route = self.check_dynamic_route_exists(
                     pattern, routes_to_check, parameters
                 )
             else:
+                # url_hash统计并返回uri中/的个数
                 routes_to_check = self.routes_dynamic[url_hash(uri)]
                 ndx, route = self.check_dynamic_route_exists(
                     pattern, routes_to_check, parameters
@@ -292,6 +313,7 @@ class Router:
         is_static = False
         if name and name.startswith("_static_"):
             is_static = True
+            # 根据_static_ 分割一次,取/后面的元素
             name = name.split("_static_", 1)[-1]
 
         if hasattr(handler, "__blueprintname__"):
@@ -325,10 +347,13 @@ class Router:
                 self.routes_names[handler_name] = (uri, route)
 
         if properties["unhashable"]:
+            # 路由中有/；
             self.routes_always_check.append(route)
         elif parameters:
+            # 动态路由,路由中没有/
             self.routes_dynamic[url_hash(uri)].append(route)
         else:
+            # 静态路由的名字是以_static_开始
             self.routes_static[uri] = route
         return route
 
@@ -406,8 +431,12 @@ class Router:
         :param method: request method
         :return: handler, arguments, keyword arguments
         """
+        # 去掉url中的转义字符，编码序列替换为uncode
         url = unquote(host + url)
-        # Check against known static routes
+        # Check against known static routes 
+        # Route = namedtuple( 
+        # "Route", ["handler", "methods", "pattern", "parameters", "name", "uri"] 
+        # ) 
         route = self.routes_static.get(url)
         method_not_supported = MethodNotSupported(
             f"Method {method} not allowed for URL {url}",
@@ -424,17 +453,20 @@ class Router:
             # Move on to testing all regex routes
             for route in self.routes_dynamic[url_hash(url)]:
                 match = route.pattern.match(url)
+                # 只要match 是1就是1  TODO not_know
                 route_found |= match is not None
                 # Do early method checking
                 if match and method in route.methods:
+                    # 跳过finally，不再检测routes_always_check
                     break
-            else:
+            else:#like finally
                 # Lastly, check against all regex routes that cannot be hashed
                 for route in self.routes_always_check:
                     match = route.pattern.match(url)
                     route_found |= match is not None
                     # Do early method checking
                     if match and method in route.methods:
+                        # 跳过finally
                         break
                 else:
                     # Route was found but the methods didn't match
@@ -442,6 +474,8 @@ class Router:
                         raise method_not_supported
                     raise NotFound(f"Requested URL {url} not found")
 
+        # 将match.groups(1)与route.parameters进行打包为元组，https://www.runoob.com/python/python-func-zip.html
+        # match.groups(1)代表是将match的结果分组返回比如match的结果是123abc!@#,第一组是123，二组是abc，三组是!@#
         kwargs = {
             p.name: p.cast(value)
             for value, p in zip(match.groups(1), route.parameters)
@@ -451,12 +485,14 @@ class Router:
             route_handler = route_handler.handlers[method]
         return route_handler, [], kwargs, route.uri, route.name
 
+    # 句柄中用is_stream标识stream方法
     def is_stream_handler(self, request):
         """ Handler for request is stream or not.
         :param request: Request object
         :return: bool
         """
         try:
+            # 获取request中的route_handler,分别从静态路由和动态路由中获取
             handler = self.get(request)[0]
         except (NotFound, MethodNotSupported):
             return False

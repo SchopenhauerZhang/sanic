@@ -102,6 +102,7 @@ class Sanic:
                 "Loop can only be retrieved after the app has started "
                 "running. Not supported with `create_server` function"
             )
+
         return get_event_loop()
 
     # -------------------------------------------------------------------- #
@@ -157,6 +158,10 @@ class Sanic:
         :param event: when to register listener i.e. 'before_server_start'
         :return: listener
         """
+        # def listener(event):
+        #   return decorato(listenner){
+        #     return self.listeners[event].append(listener)
+        # }
 
         return self.listener(event)(listener)
 
@@ -1160,7 +1165,7 @@ class Sanic:
                     # This condition must be removed after implementing
                     # auto reloader for other operating systems.
                     raise NotImplementedError
-
+                # SANIC_SERVER_RUNNING为true表示是sanic通过shell起的进程
                 if (
                     auto_reload
                     and os.environ.get("SANIC_SERVER_RUNNING") != "true"
@@ -1363,8 +1368,7 @@ class Sanic:
                 "#proxy-configuration"
             )
 
-        self.error_handler.debug = debug
-        self.debug = debug
+        self.error_handler.debug = self.debug = debug
 
         server_settings = {
             "protocol": protocol,
@@ -1389,7 +1393,7 @@ class Sanic:
             ("before_server_stop", "before_stop", True),
             ("after_server_stop", "after_stop", True),
         ):
-            listeners = self.listeners[event_name].copy()
+            listeners = self.listeners[event_name].copy()# 深拷贝
             if reverse:
                 listeners.reverse()
             # Prepend sanic to the arguments when listeners are triggered
@@ -1421,6 +1425,7 @@ class Sanic:
 
         return server_settings
 
+    #  return name.part.part.part 
     def _build_endpoint_name(self, *parts):
         parts = [self.name, *parts]
         return ".".join(parts)
@@ -1429,10 +1434,12 @@ class Sanic:
     # ASGI
     # -------------------------------------------------------------------- #
 
+    # 将类的实例变为可调用对象,以便像函数一样调用实例比如 a = asgi_app() 然后 a()
     async def __call__(self, scope, receive, send):
         """To be ASGI compliant, our instance must be a callable that accepts
         three arguments: scope, receive, send. See the ASGI reference for more
         details: https://asgi.readthedocs.io/en/latest/"""
         self.asgi = True
+        # 组织before after等triger在instance实例化之前bind
         asgi_app = await ASGIApp.create(self, scope, receive, send)
         await asgi_app()

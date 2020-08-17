@@ -96,6 +96,7 @@ class Cookie(dict):
 
     def __init__(self, key, value):
         if key in self._keys:
+            # 保留字
             raise KeyError("Cookie name is a reserved word")
         if not _is_legal_key(key):
             raise KeyError("Cookie key contains illegal characters")
